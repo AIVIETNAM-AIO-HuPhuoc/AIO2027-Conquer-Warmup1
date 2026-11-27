@@ -128,6 +128,14 @@ make run-charts
 5. `outputs/chart_rfm_heatmap.png` — **RFM Heatmap**: Average Monetary Value ($) across `R_score` × `F_score`.
 6. `outputs/chart_rfm_distributions.png` — **RFM Distributions**: Recency, Frequency (clipped at 10+), and `log(1 + Monetary)` histograms.
 
+**Report charts for Direction A (Vietnamese labels, dpi=300 — also shown in the Streamlit "Direction A" tab):**
+1. `outputs/chart1_monthly_revenue_orders.png` — **Hình 1**: Monthly revenue (bars) & number of orders (line).
+2. `outputs/chart2_rfm_distribution.png` — **Hình 2**: Recency, Frequency (10+ grouped), Monetary (clipped at P99) distributions.
+3. `outputs/chart3_segment_customer_vs_revenue_share.png` — **Hình 3**: Customer share vs. revenue share of the 11 segments.
+4. `outputs/chart4_segment_avg_monetary_aov.png` — **Hình 4**: Average spend per customer & AOV of the 11 segments.
+5. `outputs/chart5_segment_conversion_abandon.png` — **Hình 5**: Session conversion rate vs. cart abandonment rate of the 11 segments.
+6. `outputs/chart6_brand_mix_by_segment.png` — **Hình 6**: Top-10 brand revenue mix per segment vs. the shop-wide baseline.
+
 #### B. Run & Display Interactive Charts in Streamlit
 ```bash
 streamlit run main.py

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import pandas as pd
+from matplotlib.figure import Figure
 
 from config import (
     AUDIT_DUPLICATES_CSV,
@@ -17,19 +18,46 @@ from config import (
     MONTHLY_SUMMARY_CSV,
     OUTPUT_DIR,
     PREPROCESSED_SENTINEL_CSV,
+    RFM_11_PROFILES_CSV,
     RFM_11_SUMMARY_CSV,
     RFM_5_SUMMARY_CSV,
     RFM_SCORED_BASE_CSV,
+    Purchases_CHUNKS_DIR,
 )
 from rfm_scoring import compute_rfm_scores
 from rfm_segmentation import run_11_segments, run_5_tiers
 from setup_data import ensure_preprocessed_data, is_preprocessed_ready
 from visualization import (
+    plot_brand_mix_by_segment,
     plot_conversion_vs_abandonment,
+    plot_monthly_revenue_orders,
     plot_rfm_distributions,
+    plot_rfm_distributions_report,
     plot_rfm_heatmap,
+    plot_segment_behavior_11,
     plot_segment_revenue_vs_customers,
+    plot_segment_share_11,
+    plot_segment_spend_11,
 )
+
+
+def load_purchases() -> pd.DataFrame:
+    """Load the clean purchase rows (only the columns the report charts need) from the monthly chunks."""
+    chunk_files = sorted(Purchases_CHUNKS_DIR.glob("purchases_*.csv"))
+    cols = ["user_id", "user_session", "brand", "price", "month"]
+    return pd.concat((pd.read_csv(f, usecols=cols) for f in chunk_files), ignore_index=True)
+
+
+def build_report_figures(rfm_11: pd.DataFrame, summary_11: pd.DataFrame, purchases: pd.DataFrame) -> Dict[str, Figure]:
+    """Build the Direction A report charts (Hình 1–6), keyed by their output PNG filename."""
+    return {
+        "chart1_monthly_revenue_orders.png": plot_monthly_revenue_orders(purchases),
+        "chart2_rfm_distribution.png": plot_rfm_distributions_report(rfm_11),
+        "chart3_segment_customer_vs_revenue_share.png": plot_segment_share_11(summary_11),
+        "chart4_segment_avg_monetary_aov.png": plot_segment_spend_11(summary_11),
+        "chart5_segment_conversion_abandon.png": plot_segment_behavior_11(summary_11),
+        "chart6_brand_mix_by_segment.png": plot_brand_mix_by_segment(purchases, rfm_11),
+    }
 
 
 def run_full_pipeline(
@@ -63,6 +91,7 @@ def run_full_pipeline(
         fig_5_conv = plot_conversion_vs_abandonment(summary_5, "customer_tier")
         fig_heat = plot_rfm_heatmap(rfm_base)
         fig_dist = plot_rfm_distributions(rfm_base)
+        report_figs = build_report_figures(rfm_11, summary_11, load_purchases())
 
         if save_plots:
             fig_11.savefig(OUTPUT_DIR / "chart_11_segments_share.png", bbox_inches="tight")
@@ -71,6 +100,8 @@ def run_full_pipeline(
             fig_5_conv.savefig(OUTPUT_DIR / "chart_5_tiers_conversion.png", bbox_inches="tight")
             fig_heat.savefig(OUTPUT_DIR / "chart_rfm_heatmap.png", bbox_inches="tight")
             fig_dist.savefig(OUTPUT_DIR / "chart_rfm_distributions.png", bbox_inches="tight")
+            for filename, fig in report_figs.items():
+                fig.savefig(OUTPUT_DIR / filename, dpi=300, bbox_inches="tight")  # dpi=300 for Docs/Slides
             print(f"\n[Pipeline] Saved visualization charts and CSV summaries to: {OUTPUT_DIR}")
 
         if show_plots:
@@ -134,35 +165,49 @@ def render_streamlit_app() -> None:
         uploaded_file = st.file_uploader("Upload `pre-processed.csv` or `rfm_scored_base.csv`", type=["csv"])
 
     @st.cache_data(show_spinner="Loading & scoring RFM data...")
-    def load_or_compute_data(uploaded_bytes: Optional[bytes] = None) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def load_or_compute_data(
+        uploaded_bytes: Optional[bytes] = None,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         if uploaded_bytes is not None:
             import io
 
             df_in = pd.read_csv(io.BytesIO(uploaded_bytes))
             rfm_base_df = compute_rfm_scores(preprocessed_df=df_in, save_output=False)
-            _, sum_11 = run_11_segments(rfm_base_df, save_output=False)
+            rfm_11_df, sum_11 = run_11_segments(rfm_base_df, save_output=False)
             _, sum_5 = run_5_tiers(rfm_base_df, save_output=False)
-            return rfm_base_df, sum_11, sum_5
+            return rfm_base_df, rfm_11_df, sum_11, sum_5
 
-        if RFM_SCORED_BASE_CSV.exists() and RFM_11_SUMMARY_CSV.exists() and RFM_5_SUMMARY_CSV.exists():
+        if (
+            RFM_SCORED_BASE_CSV.exists()
+            and RFM_11_PROFILES_CSV.exists()
+            and RFM_11_SUMMARY_CSV.exists()
+            and RFM_5_SUMMARY_CSV.exists()
+        ):
             return (
                 pd.read_csv(RFM_SCORED_BASE_CSV),
+                pd.read_csv(RFM_11_PROFILES_CSV),
                 pd.read_csv(RFM_11_SUMMARY_CSV),
                 pd.read_csv(RFM_5_SUMMARY_CSV),
             )
 
         if PREPROCESSED_SENTINEL_CSV.exists():
             rfm_base_df = compute_rfm_scores(save_output=True)
-            _, sum_11 = run_11_segments(rfm_base_df, save_output=True)
+            rfm_11_df, sum_11 = run_11_segments(rfm_base_df, save_output=True)
             _, sum_5 = run_5_tiers(rfm_base_df, save_output=True)
-            return rfm_base_df, sum_11, sum_5
+            return rfm_base_df, rfm_11_df, sum_11, sum_5
 
         results = run_full_pipeline(force_preprocess=False, save_plots=False)
-        return results["rfm_base"], results["summary_11"], results["summary_5"]
+        return results["rfm_base"], results["rfm_11"], results["summary_11"], results["summary_5"]
+
+    @st.cache_data(show_spinner="Loading purchase rows for report charts...")
+    def load_purchases_cached() -> Optional[pd.DataFrame]:
+        if not any(Purchases_CHUNKS_DIR.glob("purchases_*.csv")):
+            return None
+        return load_purchases()
 
     try:
         uploaded_bytes = uploaded_file.getvalue() if uploaded_file is not None else None
-        rfm_base, summary_11, summary_5 = load_or_compute_data(uploaded_bytes)
+        rfm_base, rfm_11, summary_11, summary_5 = load_or_compute_data(uploaded_bytes)
     except Exception as e:
         st.error(f"Data not yet initialized: {e}")
         st.info(
@@ -216,15 +261,16 @@ def render_streamlit_app() -> None:
 
     with tab_11:
         st.subheader("Direction A: 11 Detailed RFM Segments")
-        c1, c2 = st.columns([1.15, 1])
-        with c1:
-            st.pyplot(
-                plot_segment_revenue_vs_customers(
-                    summary_11, "segment_11", "11 Segments: Customer Share vs. Revenue Share"
-                )
-            )
-        with c2:
-            st.pyplot(plot_conversion_vs_abandonment(summary_11, "segment_11"))
+        purchases = load_purchases_cached()
+        if purchases is None:
+            st.info("Purchase chunks not found in `data/processed/purchases_by_month/` — skipping Hình 1 & Hình 6.")
+            st.pyplot(plot_rfm_distributions_report(rfm_11))
+            st.pyplot(plot_segment_share_11(summary_11))
+            st.pyplot(plot_segment_spend_11(summary_11))
+            st.pyplot(plot_segment_behavior_11(summary_11))
+        else:
+            for fig in build_report_figures(rfm_11, summary_11, purchases).values():
+                st.pyplot(fig)
 
         st.dataframe(summary_11, use_container_width=True)
 
