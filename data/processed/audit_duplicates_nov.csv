@@ -1,0 +1,5 @@
+event_type,total_events,exact_duplicate_rows,duplicate_pct
+cart,1311807,39455,3.01
+purchase,322417,296,0.09
+remove_from_cart,925481,438613,47.39
+view,2076132,274,0.01

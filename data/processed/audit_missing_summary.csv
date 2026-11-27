@@ -1,0 +1,10 @@
+column,missing_rows,missing_pct,total_raw_rows,purchase_missing_core
+event_time,0,0.0,20692840,0
+event_type,0,0.0,20692840,0
+product_id,0,0.0,20692840,0
+category_id,0,0.0,20692840,0
+category_code,20339246,98.29,20692840,0
+brand,8757117,42.32,20692840,0
+price,0,0.0,20692840,0
+user_id,0,0.0,20692840,0
+user_session,4598,0.02,20692840,0

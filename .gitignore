@@ -151,6 +151,7 @@ activemq-data/
 
 # Environments
 .env
+.env.local
 .envrc
 .venv
 env/
@@ -218,3 +219,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Raw Kaggle dataset (2.43 GB - do NOT commit raw monthly files) and generated outputs
+data/raw/
+outputs/
+*.parquet
+
+# Keep small pre-processed CSV files tracked in Git for Streamlit deployment
+!data/processed/*.csv
+!data/processed/purchases_by_month/*.csv
+
